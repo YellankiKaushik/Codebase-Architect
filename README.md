@@ -1,52 +1,55 @@
 # Codebase Architect
 
-**Codebase Architect** turns a software repository into an evidence-backed engineering handbook plus multiple synchronized architecture views.
+[![CI](https://github.com/YellankiKaushik/Codebase-Architect/actions/workflows/ci.yml/badge.svg)](https://github.com/YellankiKaushik/Codebase-Architect/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-It is local-first. Deterministic code analysis runs on your machine. Optional semantic synthesis can use a local Ollama model such as Gemma.
+Codebase Architect turns a repository into evidence-backed engineering documentation and synchronized architecture diagrams. It is local-first: deterministic scanners build the Code Intelligence Graph (CIG), architecture inference builds the Architecture Intermediate Representation (AIR), and optional local AI only explains bounded evidence.
 
 ```text
 Repository
-   ↓
-Scanner + deterministic analyzers
-   ↓
-Code Intelligence Graph (CIG) + evidence
-   ↓
-Architecture Intermediate Representation (AIR)
-   ↓
-Optional local LLM synthesis
-   ↓
-Engineering documentation + architecture diagrams
+  -> scanner + deterministic analyzers
+  -> Code Intelligence Graph + evidence
+  -> Architecture Intermediate Representation
+  -> optional local AI synthesis
+  -> docs/codebase documentation + diagrams
+  -> validation report
 ```
 
-The tool does **not** ask an LLM to read an entire repository and guess the architecture.
+The LLM is not the source of truth. Structural claims come from repository evidence wherever the current analyzers can extract it.
 
-## Confidence model
+## Status
 
-- `VERIFIED` — supported by deterministic repository evidence.
-- `INFERRED` — derived by rules or model interpretation.
-- `UNKNOWN` — not established by available evidence.
+`0.1.0` is a public alpha-quality local tool. It supports Python, JavaScript, TypeScript, common package/config files, GitHub Actions discovery, Mermaid/SVG diagram source, and no-LLM documentation generation. Static analysis cannot prove all runtime behavior, especially reflection, generated code, dynamic imports, runtime dependency injection, or opaque external systems.
 
-## Current MVP
+## Features
 
-- recursive scanner with exclusions, binary guards, hashing, and symlink containment;
-- incremental content-addressed analysis cache;
-- Python AST analyzer;
-- JavaScript/TypeScript structural analyzer;
-- package/config/Docker/GitHub Actions discovery;
-- normalized Code Intelligence Graph;
-- file/line evidence references;
-- architecture inference and component grouping;
-- Ollama provider for Gemma or another local model;
-- bounded component-by-component synthesis;
-- master engineering document and component docs;
-- evidence index + JSON CIG/AIR;
-- technical, C4, data-flow, runtime, and SVG visual diagrams;
-- generated-output validation and secret scanning;
-- `--offline` and `--no-llm`;
-- Agent Skill for compatible coding agents;
-- standard-library-only runtime core.
+- deterministic scanner with exclusions, size limits, hashing, binary guards, and symlink containment
+- Python AST analyzer
+- JavaScript/TypeScript structural analyzer with imports, exports, routes, env access, calls, events, and Next.js route handlers
+- package/config/Docker/GitHub Actions discovery
+- normalized CIG with evidence IDs
+- AIR component grouping and explainable architecture classification
+- optional Ollama provider
+- optional generic OpenAI-compatible local provider
+- offline policy for loopback-only model endpoints
+- structured AI synthesis validation
+- generated documentation overwrite protection
+- validation report and run manifest
+- Agent Skill installer for other repositories
 
-## Install from source
+## Confidence Model
+
+| Classification | Meaning |
+|---|---|
+| `VERIFIED` | deterministic repository evidence supports the structural claim |
+| `INFERRED` | rule or model interpretation based on evidence but not fully proven |
+| `UNKNOWN` | current repository evidence does not establish the fact |
+
+AI output may help summarize or classify, but it cannot upgrade a claim to `VERIFIED`.
+
+## Install
+
+From a local checkout:
 
 ```bash
 git clone https://github.com/YellankiKaushik/Codebase-Architect.git
@@ -57,25 +60,71 @@ python -m pip install -e .
 codebase-architect doctor
 ```
 
-## Analyze with no AI
+Source tool installs should work when Python packaging tools are available:
 
 ```bash
-codebase-architect analyze /path/to/repository --no-llm
+pipx install git+https://github.com/YellankiKaushik/Codebase-Architect.git
+uv tool install git+https://github.com/YellankiKaushik/Codebase-Architect.git
 ```
 
-## Fully local Gemma
-
-Run Ollama and make a Gemma model available, then:
+## 60-Second Quick Start
 
 ```bash
+codebase-architect init .
+codebase-architect analyze . --no-llm
+codebase-architect validate docs/codebase
+```
+
+Open `docs/codebase/DEEP_TECHNICAL_ARCHITECTURE.md` and `docs/codebase/diagrams/`.
+
+## Local Gemma Example
+
+Model tags vary by runtime and release. Install/start Ollama, make a Gemma model available, then substitute the exact local model name reported by your runtime:
+
+```bash
+ollama list
+codebase-architect doctor --provider ollama --model <their-local-gemma-model-name> --offline
 codebase-architect analyze . \
   --offline \
   --provider ollama \
-  --model gemma4:e4b \
-  --detail deep
+  --model <their-local-gemma-model-name>
 ```
 
-`--offline` rejects non-loopback model endpoints.
+Gemma is an example, not a hard-coded requirement.
+
+## Other Local Models
+
+Use any model your local runtime exposes through an implemented adapter:
+
+```toml
+[model]
+provider = "openai-compatible"
+name = "my-local-model"
+base_url = "http://127.0.0.1:1234/v1"
+api_key_env = "OPTIONAL_LOCAL_API_KEY"
+timeout_seconds = 120
+max_context_tokens = 8192
+```
+
+See [docs/LOCAL_MODELS.md](docs/LOCAL_MODELS.md).
+
+## CLI
+
+```bash
+codebase-architect doctor
+codebase-architect init .
+codebase-architect analyze . --no-llm
+codebase-architect update .
+codebase-architect diagrams .
+codebase-architect validate docs/codebase
+codebase-architect inspect . --kind API_ENDPOINT
+codebase-architect providers
+codebase-architect models --provider ollama --model <model-name> --offline
+codebase-architect eval
+codebase-architect skill install .
+```
+
+`update` currently reuses the same incremental cache-backed pipeline as `analyze`. `diagrams` runs analysis with LLM disabled and emits diagram artifacts from AIR.
 
 ## Output
 
@@ -98,77 +147,59 @@ docs/codebase/
 └── validation-report.md
 ```
 
-## Commands
-
-```bash
-codebase-architect analyze .
-codebase-architect update .
-codebase-architect diagrams .
-codebase-architect validate docs/codebase
-codebase-architect inspect . --kind API_ENDPOINT
-codebase-architect doctor
-```
-
-Focused analysis:
-
-```bash
-codebase-architect analyze . --focus src/payments
-```
-
-Select views:
-
-```bash
-codebase-architect analyze . --diagrams technical,dataflow,c4,runtime,visual
-```
-
-## Configuration
-
-`.codebase-architect.toml`:
-
-```toml
-[analysis]
-detail = "deep"
-max_file_bytes = 1000000
-exclude = ["node_modules/**", "dist/**", "vendor/**"]
-
-[model]
-provider = "ollama"
-name = "gemma4:e4b"
-base_url = "http://127.0.0.1:11434"
-
-[security]
-offline = true
-persist_model_cache = false
-
-[output]
-path = "docs/codebase"
-diagrams = ["technical", "dataflow", "c4", "runtime", "visual"]
-```
-
-CLI flags override repository configuration.
-
 ## Agent Skill
 
-The repository includes `.github/skills/codebase-architect/SKILL.md`. The skill tells the coding agent to run the engine rather than independently hallucinate an architecture.
+Install the CLI once, then in another repository:
 
-## Security
+```bash
+cd my-project
+codebase-architect skill install .
+```
 
-Analyzed repositories are untrusted input. By default the tool does not execute the analyzed project's code, install its packages, or run build/test scripts. It redacts likely secrets before model prompts and scans generated outputs again.
+This creates:
 
-See [SECURITY.md](SECURITY.md).
+```text
+my-project/.github/skills/codebase-architect/SKILL.md
+```
 
-## Supported languages
+The skill instructs compatible coding agents to invoke the deterministic CLI and write generated docs to `docs/codebase/`. See [docs/AGENT_SKILL_USAGE.md](docs/AGENT_SKILL_USAGE.md).
 
-- Python
-- JavaScript
-- TypeScript
+## Privacy And Security
 
-More analyzers are intended to be pluggable.
+By default the tool does not execute analyzed project code, install project dependencies, run repository scripts, or send telemetry. `--no-llm` performs deterministic analysis only. `--offline` rejects non-loopback model endpoints and blocks remote redirects in provider HTTP clients.
 
-## Design specification
+Repository content is hostile input. Prompts separate trusted instructions from untrusted repository context, likely secrets are redacted before model calls, and generated output is scanned for likely secrets.
 
-See [docs/DEEP_TECHNICAL_ARCHITECTURE.md](docs/DEEP_TECHNICAL_ARCHITECTURE.md).
+See [SECURITY.md](SECURITY.md) and [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md).
 
-## Status
+## Documentation
 
-`0.1.0` is an alpha MVP. Static analysis cannot prove all runtime behavior, particularly reflection, generated code, dynamic imports, metaprogramming, runtime DI, and opaque external systems. Codebase Architect surfaces these limits instead of presenting guesses as facts.
+- [Getting Started](docs/GETTING_STARTED.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Local Models](docs/LOCAL_MODELS.md)
+- [Agent Skill Usage](docs/AGENT_SKILL_USAGE.md)
+- [Security Model](docs/SECURITY_MODEL.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Provider Development](docs/PROVIDER_DEVELOPMENT.md)
+- [Analyzer Development](docs/ANALYZER_DEVELOPMENT.md)
+- [Performance Methodology](docs/PERFORMANCE.md)
+- [Deep Technical Architecture](docs/DEEP_TECHNICAL_ARCHITECTURE.md)
+
+## Development
+
+```bash
+python -m pip install -e .
+python -m unittest discover -s tests -v
+codebase-architect eval
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Roadmap
+
+- richer cross-file symbol resolution
+- optional Tree-sitter or TypeScript semantic backend
+- larger fixture corpus and optional model-backed evaluations
+- optional D2/Graphviz renderers
+- cache policy controls for structured AI synthesis
+- broader analyzer ecosystem
