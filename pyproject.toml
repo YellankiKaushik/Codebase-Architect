@@ -8,10 +8,22 @@ version = "0.1.0"
 description = "Local-first codebase intelligence, engineering documentation, and architecture diagram generator."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "See LICENSE"}
+license = "Apache-2.0"
 authors = [{name = "Codebase Architect contributors"}]
 keywords = ["codebase", "architecture", "documentation", "agent-skill", "ollama", "gemma"]
 dependencies = []
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Documentation",
+  "Topic :: Software Development :: Documentation",
+  "Topic :: Software Development :: Quality Assurance",
+]
 
 [project.scripts]
 codebase-architect = "codebase_architect.cli:main"
@@ -19,6 +31,8 @@ codebase-architect = "codebase_architect.cli:main"
 [project.urls]
 Repository = "https://github.com/YellankiKaushik/Codebase-Architect"
 Issues = "https://github.com/YellankiKaushik/Codebase-Architect/issues"
+Documentation = "https://github.com/YellankiKaushik/Codebase-Architect/tree/main/docs"
+Security = "https://github.com/YellankiKaushik/Codebase-Architect/security"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -26,5 +40,14 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+codebase_architect = ["resources/*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+  "build",
+  "pytest",
+]
