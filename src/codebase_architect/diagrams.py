@@ -1,0 +1,81 @@
+from __future__ import annotations
+import html
+import re
+from pathlib import Path
+from .models import ArchitectureIR
+
+def generate_diagrams(air: ArchitectureIR, output: Path, selected: list[str]) -> list[Path]:
+    output.mkdir(parents=True, exist_ok=True)
+    created, selected_set = [], {x.lower() for x in selected}
+    if "technical" in selected_set: created.append(_write(output / "technical.mmd", technical_mermaid(air)))
+    if "c4" in selected_set: created.append(_write(output / "c4-containers.mmd", c4_mermaid(air)))
+    if "dataflow" in selected_set: created.append(_write(output / "data-flow.mmd", dataflow_mermaid(air)))
+    if "runtime" in selected_set: created.append(_write(output / "runtime.mmd", runtime_mermaid(air)))
+    if "visual" in selected_set: created.append(_write(output / "visual-overview.svg", visual_svg(air)))
+    return created
+
+def technical_mermaid(air: ArchitectureIR) -> str:
+    lines = ["flowchart LR"]
+    for i,c in enumerate(air.components): lines.append(f'  C{i}["{_m(c.name)}"]')
+    for i,d in enumerate(air.datastores): lines.append(f'  D{i}[("{_m(d["name"])}")]')
+    for i,e in enumerate(air.external_systems[:20]): lines.append(f'  E{i}["{_m(e["name"])}"]')
+    ext_index = {e["name"]: i for i,e in enumerate(air.external_systems[:20])}
+    data_index = {d["name"]: i for i,d in enumerate(air.datastores)}
+    for ci,c in enumerate(air.components):
+        for dep in c.dependencies:
+            if dep in data_index: lines.append(f"  C{ci} --> D{data_index[dep]}")
+            elif dep in ext_index: lines.append(f"  C{ci} -.-> E{ext_index[dep]}")
+    if len(lines) == 1: lines.append('  Empty["No architectural components detected"]')
+    return "\n".join(lines)+"\n"
+
+def c4_mermaid(air: ArchitectureIR) -> str:
+    lines = ["flowchart TB", f'  User["Engineer / User"] --> System["{_m(air.repository_name)}"]', "  subgraph SystemBoundary[System Boundary]"]
+    for i,c in enumerate(air.components): lines.append(f'    C{i}["{_m(c.name)}"]')
+    lines.append("  end")
+    for i,d in enumerate(air.datastores): lines.append(f'  D{i}[("{_m(d["name"])}")]')
+    for i,e in enumerate(air.external_systems[:15]): lines.append(f'  E{i}["{_m(e["name"])}"]')
+    if air.components: lines.append("  System --> C0")
+    return "\n".join(lines)+"\n"
+
+def dataflow_mermaid(air: ArchitectureIR) -> str:
+    lines = ["flowchart LR", '  Input["Repository / Request Input"]']
+    for i,c in enumerate(air.components): lines.append(f'  C{i}["{_m(c.name)}"]')
+    for i,d in enumerate(air.datastores): lines.append(f'  D{i}[("{_m(d["name"])}")]')
+    for i,e in enumerate(air.external_systems[:10]): lines.append(f'  E{i}["{_m(e["name"])}"]')
+    if air.components:
+        lines.append("  Input --> C0")
+        for i in range(len(air.components)-1): lines.append(f"  C{i} --> C{i+1}")
+    for i in range(len(air.datastores)):
+        if air.components: lines.append(f"  C{min(i,len(air.components)-1)} --> D{i}")
+    return "\n".join(lines)+"\n"
+
+def runtime_mermaid(air: ArchitectureIR) -> str:
+    lines = ["sequenceDiagram", "  actor User"]
+    if air.workflows:
+        previous = "User"
+        for i,step in enumerate(air.workflows[0].get("steps", [])):
+            p=f"P{i}"; lines.append(f'  participant {p} as {_sequence(step)}'); lines.append(f"  {previous}->>{p}: {_sequence(step)}"); previous=p
+    else:
+        lines += ["  participant Repo as Repository", "  participant App as Application", "  User->>Repo: interact", "  Repo->>App: execution path UNKNOWN"]
+    return "\n".join(lines)+"\n"
+
+def visual_svg(air: ArchitectureIR) -> str:
+    width, box_w, box_h, gap_x, gap_y, cols = 1200, 220, 90, 60, 70, 4
+    total=max(1,len(air.components)); rows=(total+cols-1)//cols; height=max(420,180+rows*(box_h+gap_y))
+    elements=[f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">','<rect width="100%" height="100%" rx="24" fill="#ffffff"/>',f'<text x="60" y="64" font-family="system-ui, sans-serif" font-size="30" font-weight="700">{html.escape(air.repository_name)}</text>',f'<text x="60" y="98" font-family="system-ui, sans-serif" font-size="16">{html.escape(air.architecture_style)}</text>']
+    positions=[]
+    for i,c in enumerate(air.components):
+        col,row=i%cols,i//cols;x=60+col*(box_w+gap_x);y=140+row*(box_h+gap_y);positions.append((x,y))
+        elements.append(f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="18" fill="#f5f5f5" stroke="#222" stroke-width="1.5"/>')
+        elements.append(f'<text x="{x+18}" y="{y+36}" font-family="system-ui, sans-serif" font-size="17" font-weight="650">{html.escape(c.name[:28])}</text>')
+        sub=html.escape((c.summary or c.responsibility).replace("\n"," ")[:54])
+        elements.append(f'<text x="{x+18}" y="{y+62}" font-family="system-ui, sans-serif" font-size="11">{sub}</text>')
+    for i in range(len(positions)-1):
+        x1,y1=positions[i];x2,y2=positions[i+1]
+        elements.append(f'<line x1="{x1+box_w}" y1="{y1+box_h/2}" x2="{x2}" y2="{y2+box_h/2}" stroke="#777" stroke-width="1.5"/>')
+    elements.append("</svg>")
+    return "\n".join(elements)
+
+def _m(v:str)->str: return v.replace('"',"'").replace("\n"," ")
+def _sequence(v:str)->str: return re.sub(r"[^A-Za-z0-9_ ./:-]","",v)[:80] or "step"
+def _write(path:Path,content:str)->Path: path.write_text(content,encoding="utf-8");return path
