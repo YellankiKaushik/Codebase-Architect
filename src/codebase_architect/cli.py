@@ -1,14 +1,16 @@
 from __future__ import annotations
 import argparse
+import importlib.resources
 import json
 import shutil
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from . import __version__
 from .config import Config
+from .errors import CodebaseArchitectError
 from .graph import CodeGraph
-from .llm import provider_from_config
+from .llm import provider_from_config, provider_types
 from .pipeline import run_analysis
 from .validate import validate_output
 
@@ -21,11 +23,16 @@ def build_parser()->argparse.ArgumentParser:
         if name=="diagrams": p.set_defaults(no_llm=True)
     p=sub.add_parser("validate",help="Validate generated documentation directory");p.add_argument("path",nargs="?",default="docs/codebase");p.add_argument("--json",action="store_true",dest="json_output")
     p=sub.add_parser("inspect",help="Analyze then inspect graph elements");p.add_argument("path",nargs="?",default=".");p.add_argument("--kind");p.add_argument("--name")
-    p=sub.add_parser("doctor",help="Check local installation and optional tools");p.add_argument("--provider",default="none");p.add_argument("--model",default="");p.add_argument("--base-url",default="http://127.0.0.1:11434");p.add_argument("--offline",action="store_true");p.add_argument("--json",action="store_true",dest="json_output")
+    p=sub.add_parser("doctor",help="Check local installation and optional tools");p.add_argument("--provider",default="none");p.add_argument("--model",default="");p.add_argument("--base-url",default="http://127.0.0.1:11434");p.add_argument("--api-key-env");p.add_argument("--offline",action="store_true");p.add_argument("--json",action="store_true",dest="json_output")
+    p=sub.add_parser("providers",help="List supported provider types");p.add_argument("--json",action="store_true",dest="json_output")
+    p=sub.add_parser("models",help="Check configured provider and list models when available");p.add_argument("--provider",default="none",choices=["none","ollama","openai-compatible"]);p.add_argument("--model",default="");p.add_argument("--base-url",default="http://127.0.0.1:11434");p.add_argument("--api-key-env");p.add_argument("--offline",action="store_true");p.add_argument("--json",action="store_true",dest="json_output")
+    p=sub.add_parser("init",help="Create a starter .codebase-architect.toml");p.add_argument("path",nargs="?",default=".");p.add_argument("--force",action="store_true");p.add_argument("--json",action="store_true",dest="json_output")
+    p=sub.add_parser("eval",help="Run deterministic built-in evaluation checks");p.add_argument("--json",action="store_true",dest="json_output")
+    skill=sub.add_parser("skill",help="Manage Agent Skill installation");skill_sub=skill.add_subparsers(dest="skill_command",required=True);install=skill_sub.add_parser("install",help="Install the Codebase Architect Agent Skill into a repository");install.add_argument("path",nargs="?",default=".");install.add_argument("--force",action="store_true");install.add_argument("--json",action="store_true",dest="json_output")
     return parser
 
 def _analysis_args(p):
-    p.add_argument("path",nargs="?",default=".");p.add_argument("--config");p.add_argument("--output");p.add_argument("--detail",choices=["quick","standard","deep","exhaustive"]);p.add_argument("--focus");p.add_argument("--exclude",action="append",default=[]);p.add_argument("--max-file-bytes",type=int);p.add_argument("--provider",choices=["none","ollama"]);p.add_argument("--model");p.add_argument("--base-url");p.add_argument("--offline",action="store_true");p.add_argument("--no-llm",action="store_true");p.add_argument("--diagrams");p.add_argument("--json",action="store_true",dest="json_output")
+    p.add_argument("path",nargs="?",default=".");p.add_argument("--config");p.add_argument("--output");p.add_argument("--detail",choices=["quick","standard","deep","exhaustive"]);p.add_argument("--focus");p.add_argument("--exclude",action="append",default=[]);p.add_argument("--max-file-bytes",type=int);p.add_argument("--provider",choices=["none","ollama","openai-compatible"]);p.add_argument("--model");p.add_argument("--base-url");p.add_argument("--api-key-env");p.add_argument("--timeout-seconds",type=int);p.add_argument("--max-context-tokens",type=int);p.add_argument("--retry-attempts",type=int);p.add_argument("--offline",action="store_true");p.add_argument("--no-llm",action="store_true");p.add_argument("--diagrams");p.add_argument("--json",action="store_true",dest="json_output")
 
 def main(argv:list[str]|None=None)->None:
     args=build_parser().parse_args(argv)
@@ -37,7 +44,12 @@ def main(argv:list[str]|None=None)->None:
             return
         if args.command=="inspect": _inspect(args);return
         if args.command=="doctor": _doctor(args);return
-    except (ValueError,FileNotFoundError,RuntimeError) as exc:
+        if args.command=="providers": _providers(args);return
+        if args.command=="models": _models(args);return
+        if args.command=="init": _init(args);return
+        if args.command=="eval": _eval(args);return
+        if args.command=="skill" and args.skill_command=="install": _skill_install(args);return
+    except (CodebaseArchitectError, ValueError,FileNotFoundError,RuntimeError) as exc:
         print(f"error: {exc}",file=sys.stderr);raise SystemExit(2) from exc
 
 def _run(args)->dict:
@@ -50,6 +62,10 @@ def _run(args)->dict:
     if args.provider is not None: config.model=replace(config.model,provider=args.provider)
     if args.model is not None: config.model=replace(config.model,name=args.model)
     if args.base_url is not None: config.model=replace(config.model,base_url=args.base_url)
+    if args.api_key_env is not None: config.model=replace(config.model,api_key_env=args.api_key_env)
+    if args.timeout_seconds is not None: config.model=replace(config.model,timeout_seconds=args.timeout_seconds)
+    if args.max_context_tokens is not None: config.model=replace(config.model,max_context_tokens=args.max_context_tokens)
+    if args.retry_attempts is not None: config.model=replace(config.model,retry_attempts=args.retry_attempts)
     if args.offline: config.security=replace(config.security,offline=True)
     if args.diagrams: config.output=replace(config.output,diagrams=[x.strip() for x in args.diagrams.split(",") if x.strip()])
     config.validate();return run_analysis(repo,config,use_llm=not args.no_llm)
@@ -64,9 +80,77 @@ def _inspect(args)->None:
 def _doctor(args)->None:
     checks={"python":{"ok":sys.version_info>=(3,11),"detail":sys.version.split()[0]},"git":{"ok":shutil.which("git") is not None,"detail":shutil.which("git")},"graphviz_dot":{"ok":shutil.which("dot") is not None,"detail":shutil.which("dot")},"d2":{"ok":shutil.which("d2") is not None,"detail":shutil.which("d2")},"mermaid_cli":{"ok":shutil.which("mmdc") is not None,"detail":shutil.which("mmdc")}}
     if args.provider!="none":
-        cfg=Config();cfg.model=replace(cfg.model,provider=args.provider,name=args.model,base_url=args.base_url);cfg.security=replace(cfg.security,offline=args.offline);cfg.validate();ok,detail=provider_from_config(cfg.model).health();checks["model_provider"]={"ok":ok,"detail":detail}
+        cfg=Config();cfg.model=replace(cfg.model,provider=args.provider,name=args.model,base_url=args.base_url,api_key_env=args.api_key_env);cfg.security=replace(cfg.security,offline=args.offline);cfg.validate();ok,detail=provider_from_config(cfg.model,cfg).health();checks["model_provider"]={"ok":ok,"detail":detail}
     overall=checks["python"]["ok"] and checks.get("model_provider",{"ok":True})["ok"];_emit({"ok":overall,"version":__version__,"checks":checks},args.json_output)
     if not overall: raise SystemExit(2)
+
+def _providers(args)->None:
+    _emit({"ok":True,"providers":provider_types()},args.json_output)
+
+def _models(args)->None:
+    cfg=Config();cfg.model=replace(cfg.model,provider=args.provider,name=args.model,base_url=args.base_url,api_key_env=args.api_key_env);cfg.security=replace(cfg.security,offline=args.offline);cfg.validate()
+    provider=provider_from_config(cfg.model,cfg)
+    ok,detail=provider.health()
+    _emit({"ok":ok,"provider":provider.metadata.provider,"model":provider.metadata.model,"endpoint":provider.metadata.endpoint,"capabilities":asdict(provider.metadata.capabilities),"detail":detail},args.json_output)
+    if not ok: raise SystemExit(2)
+
+def _init(args)->None:
+    root=Path(args.path).resolve()
+    if not root.exists(): root.mkdir(parents=True)
+    path=root/".codebase-architect.toml"
+    if path.exists() and not args.force:
+        raise RuntimeError(f"Refusing to overwrite existing config: {path}")
+    path.write_text(_starter_config(),encoding="utf-8")
+    _emit({"ok":True,"path":str(path)},args.json_output)
+
+def _eval(args)->None:
+    from .eval import run_evaluations
+    _emit(run_evaluations(),args.json_output)
+
+def _skill_install(args)->None:
+    target=Path(args.path).resolve()
+    if not target.is_dir():
+        raise FileNotFoundError(f"Target repository does not exist: {target}")
+    try:
+        content=importlib.resources.files("codebase_architect.resources").joinpath("codebase-architect-skill.md").read_text(encoding="utf-8")
+    except (FileNotFoundError, ModuleNotFoundError) as exc:
+        source=Path.cwd()/".github"/"skills"/"codebase-architect"/"SKILL.md"
+        if not source.exists():
+            raise RuntimeError("Bundled Agent Skill template is missing") from exc
+        content=source.read_text(encoding="utf-8")
+    destination=target/".github"/"skills"/"codebase-architect"/"SKILL.md"
+    if destination.exists() and not args.force:
+        raise RuntimeError(f"Refusing to overwrite existing skill without --force: {destination}")
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    destination.write_text(content,encoding="utf-8")
+    _emit({"ok":True,"path":str(destination)},args.json_output)
+
+def _starter_config()->str:
+    return """version = 1
+
+[analysis]
+detail = "deep"
+max_file_bytes = 1000000
+exclude = ["node_modules/**", "vendor/**", "dist/**", "build/**", "coverage/**"]
+
+[model]
+provider = "none"
+name = ""
+base_url = "http://127.0.0.1:11434"
+timeout_seconds = 120
+retry_attempts = 1
+# max_context_tokens = 8192
+# api_key_env = "LOCAL_MODEL_API_KEY"
+
+[security]
+offline = true
+persist_model_cache = false
+
+[output]
+path = "docs/codebase"
+diagrams = ["technical", "dataflow", "c4", "runtime", "visual"]
+overwrite = "generated-only"
+"""
 
 def _emit(payload:dict,as_json:bool)->None:
     if as_json: print(json.dumps(payload,indent=2));return
