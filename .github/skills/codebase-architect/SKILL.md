@@ -27,11 +27,13 @@ codebase-architect analyze . --no-llm
 
 ## Fully local Gemma analysis
 
+First confirm the model name in the user's local runtime. Model tags vary by runtime and version.
+
 ```bash
 codebase-architect analyze . \
   --offline \
   --provider ollama \
-  --model gemma4:e4b \
+  --model <their-local-gemma-model-name> \
   --detail deep
 ```
 
