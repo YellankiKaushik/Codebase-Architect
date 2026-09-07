@@ -9,6 +9,7 @@ from .architecture import infer_architecture
 from .cache import AnalysisCache
 from .config import Config
 from .diagrams import generate_diagrams
+from .file_safety import resolve_output_path
 from .docs import write_documentation
 from .gitutils import current_commit
 from .graph import CodeGraph
@@ -19,8 +20,9 @@ from .scanner import discover_files
 from .validate import validate_graph, validate_output
 
 def run_analysis(repository:Path,config:Config,use_llm:bool=True)->dict:
-    started=time.time();repository=repository.resolve();config.validate();stats=RunStats()
+    started=time.time();phase_started=started;phase_durations={};repository=repository.resolve();config.validate();stats=RunStats()
     records=discover_files(repository,config.analysis);stats.files_discovered=len(records)
+    phase_durations["scan_seconds"]=round(time.time()-phase_started,3);phase_started=time.time()
     cache=AnalysisCache(repository);graph=CodeGraph();stack=set();warnings=[]
     live_paths={r.path for r in records}
     for record in records:
@@ -33,29 +35,41 @@ def run_analysis(repository:Path,config:Config,use_llm:bool=True)->dict:
         except Exception as exc:
             stats.files_failed+=1;warnings.append(f"{record.path}: analyzer failure: {exc}")
     cache.remove_missing(live_paths);cache.save()
+    phase_durations["analysis_seconds"]=round(time.time()-phase_started,3);phase_started=time.time()
     stats.graph_nodes=len(graph.nodes);stats.graph_edges=len(graph.edges)
     graph_report=validate_graph(graph);warnings.extend(graph_report.warnings)
     if graph_report.errors: raise RuntimeError("Graph validation failed: "+"; ".join(graph_report.errors[:10]))
     air=infer_architecture(repository,graph,stack,warnings)
+    phase_durations["architecture_seconds"]=round(time.time()-phase_started,3);phase_started=time.time()
     if use_llm and config.model.provider not in {"","none"}:
-        synthesize_components(air,graph,provider_from_config(config.model),stats)
-    output=Path(config.output.path)
-    if not output.is_absolute(): output=repository/output
+        synthesize_components(air,graph,provider_from_config(config.model,config),stats)
+    phase_durations["synthesis_seconds"]=round(time.time()-phase_started,3);phase_started=time.time()
+    output=resolve_output_path(repository, config.output.path)
     output.mkdir(parents=True,exist_ok=True)
     commit=current_commit(repository)
-    created=write_documentation(repository,output,air,graph,stats,commit)
-    created.extend(generate_diagrams(air,output/"diagrams",config.output.diagrams))
+    force_output = config.output.overwrite == "force"
+    created=write_documentation(repository,output,air,graph,stats,commit,force=force_output)
+    created.extend(generate_diagrams(air,output/"diagrams",config.output.diagrams,force=force_output))
     manifest={
         "schema_version":"1","tool_version":"0.1.0",
         "generated_at":datetime.now(timezone.utc).isoformat(),
         "repository":str(repository),"commit":commit,
         "effective_config":{
             "analysis":asdict(config.analysis),
-            "model":{"provider":config.model.provider,"name":config.model.name,"base_url":_safe_base_url(config.model.base_url)},
+            "model":{
+                "provider":config.model.provider,
+                "name":config.model.name,
+                "base_url":_safe_base_url(config.model.base_url),
+                "api_key_env":config.model.api_key_env,
+                "timeout_seconds":config.model.timeout_seconds,
+                "max_context_tokens":config.model.max_context_tokens,
+                "retry_attempts":config.model.retry_attempts,
+            },
             "security":asdict(config.security),"output":asdict(config.output),
         },
         "stats":stats.to_dict(),
         "created_artifacts":[str(p.relative_to(output)) for p in created],
+        "phase_durations":phase_durations,
         "duration_seconds":round(time.time()-started,3),
     }
     manifest_path=output/"evidence"/"run-manifest.json";manifest_path.write_text(json.dumps(manifest,indent=2),encoding="utf-8")
