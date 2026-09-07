@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codebase-architect"
+version = "0.1.0"
+description = "Local-first codebase intelligence, engineering documentation, and architecture diagram generator."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "See LICENSE"}
+authors = [{name = "Codebase Architect contributors"}]
+keywords = ["codebase", "architecture", "documentation", "agent-skill", "ollama", "gemma"]
+dependencies = []
+
+[project.scripts]
+codebase-architect = "codebase_architect.cli:main"
+
+[project.urls]
+Repository = "https://github.com/YellankiKaushik/Codebase-Architect"
+Issues = "https://github.com/YellankiKaushik/Codebase-Architect/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
