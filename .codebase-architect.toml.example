@@ -1,13 +1,18 @@
+version = 1
+
 [analysis]
 detail = "deep"
 max_file_bytes = 1000000
 exclude = ["node_modules/**", "vendor/**", "dist/**", "build/**", "coverage/**"]
 
 [model]
-provider = "ollama"
-name = "gemma4:e4b"
+provider = "none"
+name = ""
 base_url = "http://127.0.0.1:11434"
 timeout_seconds = 120
+retry_attempts = 1
+# max_context_tokens = 8192
+# api_key_env = "LOCAL_MODEL_API_KEY"
 
 [security]
 offline = true
@@ -16,3 +21,4 @@ persist_model_cache = false
 [output]
 path = "docs/codebase"
 diagrams = ["technical", "dataflow", "c4", "runtime", "visual"]
+overwrite = "generated-only"
