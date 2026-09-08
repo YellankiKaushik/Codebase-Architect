@@ -2,10 +2,15 @@
 
 ## 0.1.0 - 2026-09-07
 
-- Added provider package with Ollama and OpenAI-compatible local adapters.
-- Hardened offline endpoint validation and provider HTTP behavior.
+- Added Python AST analysis for imports, symbols, routes, calls, and environment references.
+- Added Tree-sitter JavaScript/TypeScript AST analysis with structural JS/TS fallback.
+- Added cross-file resolver support for local imports, path aliases, and selected symbol relationships.
+- Added framework detection for common Python and JavaScript/TypeScript stacks.
+- Added Code Intelligence Graph and Architecture IR generation with evidence metadata.
+- Added Mermaid technical, dependency, C4, data-flow, runtime, and SVG overview diagrams.
+- Added benchmark and deterministic eval commands.
+- Added Ollama and OpenAI-compatible provider adapters.
+- Hardened offline endpoint validation, redirect handling, secret redaction, and output safety.
 - Added structured AI synthesis validation.
-- Added config schema versioning and unknown-key rejection.
-- Added CLI commands for init, providers, models, eval, and Agent Skill installation.
-- Improved JavaScript/TypeScript structural analysis for Next.js routes and bracket env access.
-- Expanded tests for provider mocks, offline redirects, prompt-injection boundaries, secret filtering, output safety, and CLI workflows.
+- Added Agent Skill installer and packaged skill resource.
+- Expanded the test suite to 80 tests with CI across Python 3.11, 3.12, and 3.13.
