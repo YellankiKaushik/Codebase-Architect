@@ -11,6 +11,14 @@ python -m pip install -e .
 codebase-architect doctor
 ```
 
+For full JavaScript/TypeScript AST support, install with:
+
+```bash
+python -m pip install -e ".[javascript]"
+```
+
+Without the `javascript` extra, Codebase Architect automatically falls back to structural JS/TS analysis.
+
 On Windows, activate with:
 
 ```powershell
