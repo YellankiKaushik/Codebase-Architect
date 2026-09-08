@@ -201,6 +201,7 @@ Machine-readable sources:
 # 25. Diagram Index
 
 - [`diagrams/technical.mmd`](diagrams/technical.mmd)
+- [`diagrams/dependency.mmd`](diagrams/dependency.mmd)
 - [`diagrams/c4-containers.mmd`](diagrams/c4-containers.mmd)
 - [`diagrams/data-flow.mmd`](diagrams/data-flow.mmd)
 - [`diagrams/runtime.mmd`](diagrams/runtime.mmd)
