@@ -9,6 +9,12 @@ class RedactionResult:
     count: int
     types: dict[str, int] | None = None
 
+@dataclass(slots=True)
+class SecretFinding:
+    category: str
+    count: int
+    source: str = "text"
+
 NAMED_SECRET = re.compile(r"(?i)\b([A-Z0-9_]*(?:api[_-]?key|secret|password|passwd|pwd|token|webhook)[A-Z0-9_-]*)\b\s*[:=]\s*['\"]?([^\s'\";,]{8,})")
 TOKEN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b")),
@@ -40,3 +46,13 @@ def redact(text: str) -> RedactionResult:
 
 def contains_secret(text: str) -> bool:
     return bool(NAMED_SECRET.search(text) or any(pattern.search(text) for _, pattern in TOKEN_PATTERNS))
+
+def find_secrets(text: str, *, source: str = "text") -> list[SecretFinding]:
+    categories: dict[str, int] = {}
+    def add(kind: str, amount: int) -> None:
+        if amount:
+            categories[kind] = categories.get(kind, 0) + amount
+    add("named_secret", len(NAMED_SECRET.findall(text)))
+    for kind, pattern in TOKEN_PATTERNS:
+        add(kind, len(pattern.findall(text)))
+    return [SecretFinding(category=kind, count=count, source=source) for kind, count in sorted(categories.items())]
