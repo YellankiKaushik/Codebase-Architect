@@ -25,7 +25,7 @@ The LLM is not the source of truth. Structural claims come from repository evide
 
 - deterministic scanner with exclusions, size limits, hashing, binary guards, and symlink containment
 - Python AST analyzer
-- JavaScript/TypeScript structural analyzer with imports, exports, routes, env access, calls, events, and Next.js route handlers
+- JavaScript/TypeScript Tree-sitter AST analysis when installed with the `javascript` extra, with structural analysis as a graceful fallback
 - package/config/Docker/GitHub Actions discovery
 - normalized CIG with evidence IDs
 - AIR component grouping and explainable architecture classification
@@ -59,6 +59,16 @@ source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 codebase-architect doctor
 ```
+
+Core installs include Python AST support and JavaScript/TypeScript structural fallback without requiring Tree-sitter.
+
+For full JavaScript/TypeScript AST support, install the optional extra:
+
+```bash
+python -m pip install -e ".[javascript]"
+```
+
+Use the full install when you want professional JavaScript/TypeScript repository analysis. Without the `javascript` extra, Codebase Architect automatically falls back to structural JS/TS analysis.
 
 Source tool installs should work when Python packaging tools are available:
 
@@ -188,7 +198,7 @@ See [SECURITY.md](SECURITY.md) and [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.
 ## Development
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[javascript]"
 python -m unittest discover -s tests -v
 codebase-architect eval
 ```
@@ -198,7 +208,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Roadmap
 
 - richer cross-file symbol resolution
-- optional Tree-sitter or TypeScript semantic backend
+- deeper TypeScript semantic/type resolution
 - larger fixture corpus and optional model-backed evaluations
 - optional D2/Graphviz renderers
 - cache policy controls for structured AI synthesis
