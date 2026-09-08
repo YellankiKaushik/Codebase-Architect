@@ -16,6 +16,12 @@ From a local checkout:
 python -m pip install -e .
 ```
 
+For full JavaScript/TypeScript AST analysis, install from the checkout with:
+
+```bash
+python -m pip install -e ".[javascript]"
+```
+
 From GitHub, when packaging tools are available:
 
 ```bash
