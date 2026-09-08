@@ -145,6 +145,7 @@ docs/codebase/
 ├── components/
 ├── diagrams/
 │   ├── technical.mmd
+│   ├── dependency.mmd
 │   ├── c4-containers.mmd
 │   ├── data-flow.mmd
 │   ├── runtime.mmd
@@ -207,7 +208,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Roadmap
 
-- richer cross-file symbol resolution
+- deeper type-aware and semantic cross-file resolution
 - deeper TypeScript semantic/type resolution
 - larger fixture corpus and optional model-backed evaluations
 - optional D2/Graphviz renderers
