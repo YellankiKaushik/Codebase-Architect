@@ -7,10 +7,18 @@ The core rule is **facts before prose**.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install -e ".[javascript]"
 python -m unittest discover -s tests -v
 codebase-architect eval
 ```
+
+The lightweight core install is still valid:
+
+```bash
+python -m pip install -e .
+```
+
+Use the `javascript` extra for normal development and CI-equivalent testing so JavaScript/TypeScript AST tests run against Tree-sitter instead of the structural fallback.
 
 ## Architecture Rules
 
