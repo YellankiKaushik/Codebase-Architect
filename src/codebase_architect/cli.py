@@ -18,9 +18,9 @@ def build_parser()->argparse.ArgumentParser:
     parser=argparse.ArgumentParser(prog="codebase-architect",description="Evidence-backed local codebase documentation and architecture generation.")
     parser.add_argument("--version",action="version",version=__version__)
     sub=parser.add_subparsers(dest="command",required=True)
-    for name,help_text in (("analyze","Analyze repository and generate docs/diagrams"),("update","Incrementally re-analyze repository"),("diagrams","Generate/update architecture diagrams")):
+    for name,help_text in (("analyze","Analyze repository and generate docs/diagrams"),("update","Incrementally re-analyze repository"),("diagrams","Generate/update architecture diagrams"),("benchmark","Run analysis and emit timing/cache metrics")):
         p=sub.add_parser(name,help=help_text);_analysis_args(p)
-        if name=="diagrams": p.set_defaults(no_llm=True)
+        if name in {"diagrams", "benchmark"}: p.set_defaults(no_llm=True)
     p=sub.add_parser("validate",help="Validate generated documentation directory");p.add_argument("path",nargs="?",default="docs/codebase");p.add_argument("--json",action="store_true",dest="json_output")
     p=sub.add_parser("inspect",help="Analyze then inspect graph elements");p.add_argument("path",nargs="?",default=".");p.add_argument("--kind");p.add_argument("--name")
     p=sub.add_parser("doctor",help="Check local installation and optional tools");p.add_argument("--provider",default="none");p.add_argument("--model",default="");p.add_argument("--base-url",default="http://127.0.0.1:11434");p.add_argument("--api-key-env");p.add_argument("--offline",action="store_true");p.add_argument("--json",action="store_true",dest="json_output")
@@ -38,6 +38,7 @@ def main(argv:list[str]|None=None)->None:
     args=build_parser().parse_args(argv)
     try:
         if args.command in {"analyze","update","diagrams"}: _emit(_run(args),args.json_output);return
+        if args.command=="benchmark": _emit(_benchmark(args),args.json_output);return
         if args.command=="validate":
             report=validate_output(Path(args.path).resolve());_emit({"ok":report.ok,"errors":report.errors,"warnings":report.warnings},args.json_output)
             if not report.ok: raise SystemExit(2)
@@ -69,6 +70,27 @@ def _run(args)->dict:
     if args.offline: config.security=replace(config.security,offline=True)
     if args.diagrams: config.output=replace(config.output,diagrams=[x.strip() for x in args.diagrams.split(",") if x.strip()])
     config.validate();return run_analysis(repo,config,use_llm=not args.no_llm)
+
+def _benchmark(args)->dict:
+    if not args.output:
+        args.output = ".tmp/benchmark-analysis"
+    result = _run(args)
+    manifest = json.loads((Path(result["manifest"])).read_text(encoding="utf-8"))
+    stats = manifest.get("stats", {})
+    duration = float(manifest.get("duration_seconds") or 0)
+    discovered = int(stats.get("files_discovered") or 0)
+    reused = int(stats.get("files_reused") or 0)
+    return {
+        "ok": True,
+        "output": result["output"],
+        "duration_seconds": duration,
+        "files_per_second": round(discovered / duration, 3) if duration > 0 else 0,
+        "cache_hit_rate": round(reused / discovered, 3) if discovered else 0,
+        "phase_durations": manifest.get("phase_durations", {}),
+        "stats": stats,
+        "manifest": result["manifest"],
+        "validation": result["validation"],
+    }
 
 def _inspect(args)->None:
     repo=Path(args.path).resolve();config=Config.load(repo);config.model=replace(config.model,provider="none");result=run_analysis(repo,config,use_llm=False)
@@ -148,7 +170,7 @@ persist_model_cache = false
 
 [output]
 path = "docs/codebase"
-diagrams = ["technical", "dataflow", "c4", "runtime", "visual"]
+diagrams = ["technical", "dependency", "dataflow", "c4", "runtime", "visual"]
 overwrite = "generated-only"
 """
 
