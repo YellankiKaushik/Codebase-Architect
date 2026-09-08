@@ -12,6 +12,7 @@ def generate_diagrams(air: ArchitectureIR, output: Path, selected: list[str], *,
     output.mkdir(parents=True, exist_ok=True)
     created, selected_set = [], {x.lower() for x in selected}
     if "technical" in selected_set: created.append(_write(output / "technical.mmd", technical_mermaid(air), force=force))
+    if "dependency" in selected_set: created.append(_write(output / "dependency.mmd", dependency_mermaid(air), force=force))
     if "c4" in selected_set: created.append(_write(output / "c4-containers.mmd", c4_mermaid(air), force=force))
     if "dataflow" in selected_set: created.append(_write(output / "data-flow.mmd", dataflow_mermaid(air), force=force))
     if "runtime" in selected_set: created.append(_write(output / "runtime.mmd", runtime_mermaid(air), force=force))
@@ -30,6 +31,22 @@ def technical_mermaid(air: ArchitectureIR) -> str:
             if dep in data_index: lines.append(f"  C{ci} --> D{data_index[dep]}")
             elif dep in ext_index: lines.append(f"  C{ci} -.-> E{ext_index[dep]}")
     if len(lines) == 1: lines.append('  Empty["No architectural components detected"]')
+    return "\n".join(lines)+"\n"
+
+def dependency_mermaid(air: ArchitectureIR) -> str:
+    lines = [MERMAID_MARKER, "flowchart LR"]
+    index = {c.name: i for i, c in enumerate(air.components)}
+    for i, c in enumerate(air.components):
+        lines.append(f'  C{i}["{_m(c.name)}"]')
+    external_index = {name: i for i, name in enumerate(sorted({dep for c in air.components for dep in c.dependencies if dep not in index}))}
+    for name, i in external_index.items():
+        lines.append(f'  X{i}["{_m(name)}"]')
+    for source_index, component in enumerate(air.components):
+        for dep in component.dependencies:
+            target = f"C{index[dep]}" if dep in index else f"X{external_index[dep]}"
+            lines.append(f"  C{source_index} --> {target}")
+    if len(lines) == 2:
+        lines.append('  Empty["No dependencies detected"]')
     return "\n".join(lines)+"\n"
 
 def c4_mermaid(air: ArchitectureIR) -> str:
