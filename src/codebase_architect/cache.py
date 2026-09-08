@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 from pathlib import Path
 from .models import FileAnalysis, SCHEMA_VERSION
 
@@ -22,7 +23,11 @@ class AnalysisCache:
     def get(self, path: str, content_hash: str) -> FileAnalysis | None:
         raw = self.data.get(path)
         if not raw or raw.get("content_hash") != content_hash: return None
-        try: return FileAnalysis.from_dict(raw["analysis"])
+        try:
+            analysis = FileAnalysis.from_dict(raw["analysis"])
+            if _stale_js_structural_cache(path, analysis):
+                return None
+            return analysis
         except (KeyError, TypeError, ValueError): return None
 
     def put(self, analysis: FileAnalysis) -> None:
@@ -37,3 +42,11 @@ class AnalysisCache:
         temp = self.path.with_suffix(".tmp")
         temp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         temp.replace(self.path)
+
+def _stale_js_structural_cache(path: str, analysis: FileAnalysis) -> bool:
+    suffix = Path(path).suffix.lower()
+    if suffix not in {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}:
+        return False
+    if analysis.backend != "structural-js-ts":
+        return False
+    return all(importlib.util.find_spec(name) for name in ("tree_sitter", "tree_sitter_javascript", "tree_sitter_typescript"))
