@@ -4,12 +4,17 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 class Classification(str, Enum):
     VERIFIED = "VERIFIED"
     INFERRED = "INFERRED"
     UNKNOWN = "UNKNOWN"
+
+class AnalyzerCapability(str, Enum):
+    SEMANTIC = "SEMANTIC"
+    AST = "AST"
+    STRUCTURAL = "STRUCTURAL"
 
 class NodeKind(str, Enum):
     REPOSITORY = "REPOSITORY"
@@ -30,6 +35,7 @@ class NodeKind(str, Enum):
     INFRA_RESOURCE = "INFRA_RESOURCE"
     TEST = "TEST"
     WORKFLOW = "WORKFLOW"
+    FRAMEWORK = "FRAMEWORK"
 
 class EdgeKind(str, Enum):
     CONTAINS = "CONTAINS"
@@ -46,6 +52,7 @@ class EdgeKind(str, Enum):
     CONNECTS_TO = "CONNECTS_TO"
     TESTED_BY = "TESTED_BY"
     DEPLOYED_AS = "DEPLOYED_AS"
+    RESOLVES_TO = "RESOLVES_TO"
 
 @dataclass(slots=True)
 class Evidence:
@@ -56,6 +63,7 @@ class Evidence:
     symbol: str | None = None
     content_hash: str | None = None
     note: str | None = None
+    analyzer: str | None = None
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
     @classmethod
@@ -118,6 +126,9 @@ class FileAnalysis:
     edges: list[Edge] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     stack: set[str] = field(default_factory=set)
+    analyzer: str = "unknown"
+    capability: str = AnalyzerCapability.STRUCTURAL.value
+    backend: str = "unknown"
     def to_dict(self) -> dict[str, Any]:
         return {
             "path": self.path,
@@ -126,6 +137,9 @@ class FileAnalysis:
             "edges": [e.to_dict() for e in self.edges],
             "warnings": self.warnings,
             "stack": sorted(self.stack),
+            "analyzer": self.analyzer,
+            "capability": self.capability,
+            "backend": self.backend,
         }
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "FileAnalysis":
@@ -136,6 +150,9 @@ class FileAnalysis:
             edges=[Edge.from_dict(e) for e in value.get("edges", [])],
             warnings=list(value.get("warnings", [])),
             stack=set(value.get("stack", [])),
+            analyzer=value.get("analyzer", "unknown"),
+            capability=value.get("capability", AnalyzerCapability.STRUCTURAL.value),
+            backend=value.get("backend", "unknown"),
         )
 
 @dataclass(slots=True)
@@ -164,6 +181,8 @@ class ArchitectureIR:
     configuration_keys: list[dict[str, Any]]
     workflows: list[dict[str, Any]]
     stack: list[str]
+    frameworks: list[dict[str, Any]] = field(default_factory=list)
+    architecture_reasons: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -177,6 +196,8 @@ class ArchitectureIR:
             "configuration_keys": self.configuration_keys,
             "workflows": self.workflows,
             "stack": self.stack,
+            "frameworks": self.frameworks,
+            "architecture_reasons": self.architecture_reasons,
             "warnings": self.warnings,
         }
 
@@ -191,6 +212,9 @@ class RunStats:
     llm_calls: int = 0
     llm_failures: int = 0
     redactions: int = 0
+    resolver_edges_added: int = 0
     warnings: list[str] = field(default_factory=list)
+    analyzer_capabilities: dict[str, int] = field(default_factory=dict)
+    analyzer_backends: dict[str, int] = field(default_factory=dict)
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
