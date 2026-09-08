@@ -56,6 +56,30 @@ class CodeGraph:
                     seen.add(other); frontier.append((other, level + 1))
         return seen
 
+    def has_path(self, source: str, target: str, max_depth: int = 12) -> bool:
+        if source not in self.nodes or target not in self.nodes:
+            return False
+        frontier = deque([(source, 0)])
+        seen = {source}
+        while frontier:
+            current, depth = frontier.popleft()
+            if depth >= max_depth:
+                continue
+            for edge_id in self.outgoing.get(current, set()):
+                edge = self.edges[edge_id]
+                if edge.target == target:
+                    return True
+                if edge.target not in seen:
+                    seen.add(edge.target)
+                    frontier.append((edge.target, depth + 1))
+        return False
+
+    def find_node(self, kind: str, name: str) -> Node | None:
+        for node in self.nodes.values():
+            if node.kind == kind and node.name == name:
+                return node
+        return None
+
     def to_dict(self) -> dict:
         return {"schema_version": SCHEMA_VERSION, "nodes": [n.to_dict() for n in sorted(self.nodes.values(), key=lambda n: n.id)], "edges": [e.to_dict() for e in sorted(self.edges.values(), key=lambda e: e.id)]}
 
