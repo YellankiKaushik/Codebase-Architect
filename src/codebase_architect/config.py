@@ -60,7 +60,7 @@ class SecurityConfig:
 @dataclass(slots=True)
 class OutputConfig:
     path: str = "docs/codebase"
-    diagrams: list[str] = field(default_factory=lambda: ["technical", "dataflow", "c4", "runtime", "visual"])
+    diagrams: list[str] = field(default_factory=lambda: ["technical", "dependency", "dataflow", "c4", "runtime", "visual"])
     overwrite: str = "generated-only"
 
 @dataclass(slots=True)
