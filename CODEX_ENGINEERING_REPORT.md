@@ -1,184 +1,188 @@
-# 1. Executive Summary
+# 1. Final Verdict
 
-Codebase Architect was hardened from a compact alpha MVP into a more professional local-first alpha suitable for maintainer review. The core architecture was preserved: scanner/analyzers -> CIG/evidence -> AIR -> optional AI synthesis -> docs/diagrams -> validation.
+NOT READY FOR PUSH REVIEW.
 
-Major changes include a provider-independent `llm/` subsystem, Ollama and OpenAI-compatible local adapters, stricter offline endpoint policy, structured AI synthesis validation, broader secret detection, generated-output overwrite protection, expanded CLI commands, Agent Skill installation, packaging metadata, CI gates, and user/contributor documentation.
+The second engineering pass materially improved code-intelligence quality, security posture, resolver behavior, generated-output safety, and test coverage. However, the explicit readiness bar required not lowering the JS/TS backend standard and strongly implied a real AST/semantic backend plus real local provider validation. The current JS/TS backend remains structural regex analysis, not a TypeScript compiler/ESTree/tree-sitter semantic backend, and real Ollama/OpenAI-compatible runtimes were not available or requested through opt-in environment variables.
 
-I do not consider this ready for a public beta claim yet. It is ready for review as a serious alpha-hardening pass.
+# 2. Scope
 
-# 2. Initial Audit Findings
+This pass focused on code-intelligence correctness and verification, not cosmetic documentation. The restored deep architecture documents under `docs/` were not compressed, deleted, reorganized, or rewritten.
 
-| ID | Severity | Area | Problem | Resolution |
-|---|---|---|---|---|
-| AUD-001 | P1 | Offline networking | Offline mode only allowed Ollama and trusted `localhost` without robust endpoint/redirect/proxy handling. | Added shared endpoint validation, loopback DNS/IP checks, URL credential/query rejection, proxy bypass, and remote redirect blocking. |
-| AUD-002 | P1 | AI harness | Single `llm.py` mixed provider protocol, Ollama implementation, errors, and redaction. | Replaced with `src/codebase_architect/llm/` package and provider registry. |
-| AUD-003 | P1 | Provider support | No OpenAI-compatible local provider. | Added `/models` + `/chat/completions` adapter with optional `api_key_env`. |
-| AUD-004 | P1 | Structured output | AI synthesis accepted free-form prose directly. | Added JSON synthesis prompt and validator for component/evidence IDs. |
-| AUD-005 | P1 | Secret handling | Regex coverage was narrow and errors could include unredacted provider response snippets. | Added common secret classes and redacted provider HTTP error bodies. |
-| AUD-006 | P1 | Generated output | Diagram files were overwritten without generated-file guard. | Added generated markers and guarded atomic writes. |
-| AUD-007 | P1 | Config quality | Unknown config keys were silently ignored and provider config was too small. | Added versioned schema, unknown-key rejection, provider normalization, timeout/retry/context/API-key-env fields. |
-| AUD-008 | P2 | CLI UX | Missing real `init`, provider listing, model health, eval, and skill install commands. | Added implemented CLI commands. |
-| AUD-009 | P2 | Agent Skill install | Skill existed only inside this repo and was not package-shipped. | Added packaged skill resource and `codebase-architect skill install`. |
-| AUD-010 | P2 | JS/TS analyzer | Regex analyzer missed common Next.js and env-access patterns. | Added Next route handler, bracket env, and CommonJS export detection. |
-| AUD-011 | P2 | CI/package | CI lacked package build/wheel smoke/eval gates. | Expanded workflow. |
-| AUD-012 | P2 | Docs | README and architecture doc mixed implemented behavior with target/future claims. | Rewrote README and reconciled architecture doc with implemented/future/N/A distinctions. |
-| AUD-013 | P3 | Contributor experience | Missing changelog, templates, and detailed provider/analyzer docs. | Added supporting docs/templates. |
+# 3. Baseline Measured Before Edits
 
-# 3. Files Changed
+Baseline unit suite: 21 tests run, 21 passed, 0 failed.
 
-| Path | Change | Why |
-|---|---|---|
-| `.codebase-architect.toml.example` | Modified | Add config version, provider-neutral default, retry/context/API-key-env/output overwrite fields. |
-| `.github/skills/codebase-architect/SKILL.md` | Modified | Remove hard-coded Gemma tag from skill example. |
-| `.github/workflows/ci.yml` | Modified | Add eval, provider, package build, and wheel install smoke gates. |
-| `.gitignore` | Modified | Ignore `.tmp/` verification artifacts. |
-| `.github/ISSUE_TEMPLATE/bug_report.md` | Added | Open-source issue workflow. |
-| `.github/ISSUE_TEMPLATE/security_note.md` | Added | Public security-report warning. |
-| `.github/pull_request_template.md` | Added | Contributor verification/security checklist. |
-| `CHANGELOG.md` | Added | Release/change history. |
-| `CODE_OF_CONDUCT.md` | Added | Lightweight community norms. |
-| `CONTRIBUTING.md` | Modified | Updated contributor/provider/analyzer guidance. |
-| `README.md` | Modified | Professional alpha README matching implemented behavior. |
-| `SECURITY.md` | Modified | Expanded current security policy. |
-| `docs/DEEP_TECHNICAL_ARCHITECTURE.md` | Modified | Replaced stale target-only draft with current-vs-target architecture doc. |
-| `docs/GETTING_STARTED.md` | Added | Installation and first-run workflow. |
-| `docs/LOCAL_MODELS.md` | Added | Ollama/OpenAI-compatible local model guidance and Gemma workflow. |
-| `docs/AGENT_SKILL_USAGE.md` | Added | Skill installation/use in another repository. |
-| `docs/CONFIGURATION.md` | Added | Config schema and precedence. |
-| `docs/SECURITY_MODEL.md` | Added | Threat model and safety behavior. |
-| `docs/TROUBLESHOOTING.md` | Added | User diagnostics. |
-| `docs/PROVIDER_DEVELOPMENT.md` | Added | Provider extension rules. |
-| `docs/ANALYZER_DEVELOPMENT.md` | Added | Analyzer extension rules. |
-| `docs/PERFORMANCE.md` | Added | Documented benchmark methodology using run manifests. |
-| `pyproject.toml` | Modified | Add SPDX license, classifiers, package data, URLs, dev dependency group. |
-| `src/codebase_architect/errors.py` | Added | Coherent error hierarchy. |
-| `src/codebase_architect/file_safety.py` | Added | Output-path and generated-write safety helpers. |
-| `src/codebase_architect/eval.py` | Added | Local deterministic evaluation harness. |
-| `src/codebase_architect/llm.py` | Deleted | Replaced by provider package. |
-| `src/codebase_architect/llm/__init__.py` | Added | Public LLM exports. |
-| `src/codebase_architect/llm/base.py` | Added | Provider protocol, generation request/result, metadata/capabilities. |
-| `src/codebase_architect/llm/context.py` | Added | Conservative context estimator and budget helpers. |
-| `src/codebase_architect/llm/http.py` | Added | Safe HTTP client with proxy bypass, bounded bodies, retry, redirect policy. |
-| `src/codebase_architect/llm/prompts.py` | Added | Trusted prompt template and untrusted-context framing. |
-| `src/codebase_architect/llm/registry.py` | Added | Provider registry and provider listing. |
-| `src/codebase_architect/llm/validation.py` | Added | Structured component synthesis validation. |
-| `src/codebase_architect/llm/providers/__init__.py` | Added | Provider package exports. |
-| `src/codebase_architect/llm/providers/ollama.py` | Added | Ollama provider implementation. |
-| `src/codebase_architect/llm/providers/openai_compatible.py` | Added | Generic OpenAI-compatible provider. |
-| `src/codebase_architect/resources/__init__.py` | Added | Package resource module. |
-| `src/codebase_architect/resources/codebase-architect-skill.md` | Added | Wheel-shipped Agent Skill template. |
-| `src/codebase_architect/analyzers/javascript.py` | Modified | Improve JS/TS route/env/export detection and Mermaid safety inputs indirectly. |
-| `src/codebase_architect/cli.py` | Modified | Add commands/options and error hierarchy handling. |
-| `src/codebase_architect/config.py` | Modified | Versioned schema, endpoint validation, provider fields. |
-| `src/codebase_architect/diagrams.py` | Modified | Generated markers, guarded writes, safer labels. |
-| `src/codebase_architect/docs.py` | Modified | Shared generated-file safety helper. |
-| `src/codebase_architect/pipeline.py` | Modified | Provider registry usage, output path validation, manifest config/durations. |
-| `src/codebase_architect/planner.py` | Modified | Structured AI prompt/validation and context budgeting. |
-| `src/codebase_architect/secret_filter.py` | Modified | Broader secret-class detection. |
-| `tests/test_cli.py` | Added | CLI init/eval/skill install tests. |
-| `tests/test_config.py` | Added | Config/offline validation tests. |
-| `tests/test_llm_providers.py` | Added | Ollama/OpenAI-compatible mock provider and redirect tests. |
-| `tests/test_llm_validation.py` | Added | Structured synthesis validation tests. |
-| `tests/test_output_safety.py` | Added | Overwrite and output path safety tests. |
-| `tests/test_javascript_analyzer.py` | Modified | Next route/bracket-env coverage. |
-| `tests/test_security.py` | Modified | New error expectation and secret classes. |
+Baseline compile: `python -m compileall -q src` passed.
 
-# 4. Architecture Changes
+Baseline self-analysis: 78 files discovered, 5 analyzed, 73 reused, 0 failed, 919 graph nodes, 1954 graph edges, 0 LLM calls, 0 warnings.
 
-The main structural change is replacing `src/codebase_architect/llm.py` with a provider package:
+Baseline validation: passed with no errors or warnings.
 
-```text
-src/codebase_architect/llm/
-  base.py
-  context.py
-  http.py
-  prompts.py
-  registry.py
-  validation.py
-  providers/
-    ollama.py
-    openai_compatible.py
+# 4. First-Pass History Preserved
+
+The first pass hardened the alpha around local model providers, offline endpoint policy, structured component synthesis validation, broader secret redaction, generated-output overwrite guards, CLI commands, Agent Skill installation, packaging metadata, CI gates, and user/contributor docs.
+
+The first-pass audit history remains relevant for provenance, but several items are now superseded by second-pass changes: benchmark command now exists, resolver behavior is richer, output path safety is stricter, framework detection is represented in AIR/CIG, and test coverage increased from 21 to 67 discovered tests.
+
+# 5. Changed Files
+
+Modified:
+
+- `CODEX_ENGINEERING_REPORT.md`
+- `src/codebase_architect/analyzers/base.py`
+- `src/codebase_architect/analyzers/config_files.py`
+- `src/codebase_architect/analyzers/javascript.py`
+- `src/codebase_architect/analyzers/python.py`
+- `src/codebase_architect/architecture.py`
+- `src/codebase_architect/cli.py`
+- `src/codebase_architect/config.py`
+- `src/codebase_architect/diagrams.py`
+- `src/codebase_architect/docs.py`
+- `src/codebase_architect/file_safety.py`
+- `src/codebase_architect/graph.py`
+- `src/codebase_architect/llm/validation.py`
+- `src/codebase_architect/models.py`
+- `src/codebase_architect/pipeline.py`
+- `src/codebase_architect/planner.py`
+- `src/codebase_architect/secret_filter.py`
+
+Added:
+
+- `src/codebase_architect/frameworks.py`
+- `src/codebase_architect/resolver.py`
+- `tests/test_second_pass_capabilities.py`
+- `tests/fixtures/typescript_web_api/package.json`
+- `tests/fixtures/typescript_web_api/tsconfig.json`
+- `tests/fixtures/typescript_web_api/src/routes/checkout.ts`
+- `tests/fixtures/typescript_web_api/src/controllers/checkout-controller.ts`
+- `tests/fixtures/typescript_web_api/src/services/checkout-service.ts`
+- `tests/fixtures/typescript_web_api/src/repositories/order-repository.ts`
+- `tests/fixtures/python_fastapi/requirements.txt`
+- `tests/fixtures/python_fastapi/app/main.py`
+- `tests/fixtures/python_fastapi/app/services/checkout_service.py`
+- `tests/fixtures/python_fastapi/app/repositories/order_repository.py`
+- `tests/fixtures/event_driven_js/package.json`
+- `tests/fixtures/event_driven_js/src/bus.js`
+- `tests/fixtures/event_driven_js/src/producer.js`
+- `tests/fixtures/event_driven_js/src/consumer.js`
+- `tests/fixtures/event_driven_js/src/service.js`
+- `tests/fixtures/event_driven_js/src/repository.js`
+
+# 6. Analyzer Capability Model
+
+Added explicit analyzer metadata:
+
+- `SEMANTIC`
+- `AST`
+- `STRUCTURAL`
+
+Python analysis is labeled `AST` using `python-ast`. Config and JS/TS analysis are labeled `STRUCTURAL`. This prevents structural JS/TS analysis from being accidentally represented as semantic analysis.
+
+# 7. JS/TS Backend Status
+
+Current backend: `structural-js-ts`.
+
+This pass improved import metadata, route handler capture, class method capture, static method capture, exported symbol metadata, event detection evidence, and repository-to-table inference. It did not add a real JavaScript/TypeScript AST backend.
+
+# 8. Python Backend Status
+
+Python analyzer remains AST-backed and now captures more import alias/name metadata, qualified class/function/method names, inheritance dependencies, SQLAlchemy-style table hints, repository-to-table access edges, and analyzer/evidence metadata.
+
+# 9. Cross-File Resolver
+
+Added `src/codebase_architect/resolver.py`.
+
+Implemented:
+
+- relative import resolution for Python/JS/TS paths;
+- dotted Python package import resolution;
+- TypeScript `baseUrl`/`paths` alias resolution;
+- file-to-file `IMPORTS` edges;
+- module-to-file `RESOLVES_TO` edges;
+- inferred local/imported `CALLS` edges;
+- endpoint-to-handler `HANDLES` edges;
+- imported handler lookup for route registrations.
+
+# 10. Framework Detection
+
+Added `src/codebase_architect/frameworks.py`.
+
+Detected frameworks are emitted as CIG `FRAMEWORK` nodes and represented in AIR `frameworks`. Current detection is evidence-based from stack/dependency signals and entrypoint file nodes.
+
+# 11. Architecture Inference
+
+Architecture IR now includes:
+
+- `frameworks`;
+- `architecture_reasons`;
+- workflow traversal beyond one hop using `HANDLES`, `CALLS`, `READS`, `WRITES`, `PUBLISHES`, `CONSUMES`, and `CONNECTS_TO`.
+
+Workflow traversal skips unresolved placeholder call targets when resolved targets are available.
+
+# 12. Diagram Updates
+
+Added `dependency.mmd` generation and included it in default diagram selection.
+
+Generated docs now list:
+
+- `technical.mmd`
+- `dependency.mmd`
+- `c4-containers.mmd`
+- `data-flow.mmd`
+- `runtime.mmd`
+- `visual-overview.svg`
+
+# 13. Benchmark Command
+
+Added:
+
+```powershell
+codebase-architect benchmark . --no-llm --exclude .tmp/** --json
 ```
 
-Updated architecture diagram:
+Measured second-pass benchmark result on warm cache:
 
-```text
-Repository
-  -> scanner/analyzers
-  -> CIG + evidence
-  -> graph validation
-  -> AIR inference
-  -> optional llm provider + structured validation
-  -> docs/diagrams via generated-output safety
-  -> output validation + run manifest
-```
+- duration: 0.49s
+- files per second: 197.959
+- cache hit rate: 1.0
+- files discovered: 97
+- files reused: 97
+- graph nodes: 1280
+- graph edges: 3094
+- resolver edges added: 220
 
-# 5. AI Harness
+# 14. Secret Handling
 
-- Provider interface: `GenerationRequest`, `GenerationResult`, `ModelMetadata`, `ModelCapabilities`, and `LLMProvider`.
-- Ollama: health checks `/api/tags`, generates via `/api/generate`, requests JSON when structured output is needed.
-- OpenAI-compatible: health checks `/models`, generates via `/chat/completions`, supports optional bearer token from `api_key_env`.
-- Structured output: `ComponentSynthesis` JSON is parsed and validated before it becomes component summary text.
-- Context budgeting: conservative character/token estimator with bounded node/edge inclusion and omission warnings.
-- Validation: component IDs must match; cited evidence IDs must exist; AI-origin `VERIFIED` claims are ignored and warned.
-- Fallback behavior: provider health failure records a warning and deterministic output continues.
-- Caching: deterministic file-analysis cache remains implemented; structured model cache is deferred.
-- Prompt-injection controls: trusted system instructions are separated from explicitly marked untrusted repository JSON. The harness gives the model no tools.
+Added structured `SecretFinding` results through `find_secrets`, reporting categories and counts without retaining secret values.
 
-# 6. Local Model Support
+Existing redaction behavior remains value-redacting and category-counted.
 
-| Runtime | Adapter | Tested/Mock-tested | Configuration | Notes |
-|---|---|---|---|---|
-| Ollama | `ollama` | Mock-tested | `provider = "ollama"`, `base_url = "http://127.0.0.1:11434"` | Real runtime not present in this environment. |
-| Generic OpenAI-compatible local API | `openai-compatible` | Mock-tested | `provider = "openai-compatible"`, `base_url = "http://127.0.0.1:1234/v1"` | Covers compatible local servers; no runtime-specific claims. |
-| No model | `none` | Tested | `provider = "none"` or `--no-llm` | First-class deterministic path. |
+# 15. Output Safety
 
-# 7. Gemma Usage
+Output path safety now rejects absolute output paths outside the repository unless explicitly allowed by API, rejects relative escapes, and refuses generated writes through existing symlinked paths.
 
-Gemma workflow is documented in:
+The direct symlink test is platform-skipped on this Windows host because the process lacks symlink privilege, but the code path is implemented and guarded.
 
-- `README.md`
-- `docs/LOCAL_MODELS.md`
-- `docs/AGENT_SKILL_USAGE.md`
-- `.github/skills/codebase-architect/SKILL.md`
-- `src/codebase_architect/resources/codebase-architect-skill.md`
+# 16. LLM Validation
 
-All examples use `<their-local-gemma-model-name>` and tell users to verify local runtime model names.
+Structured validation now covers:
 
-# 8. Agent Skill
+- `ComponentSynthesis`
+- `WorkflowSynthesis`
+- `SystemSummary`
+- `RiskCandidate`
 
-A new user installs the CLI once, then in another repository runs:
+Validators reject malformed JSON, wrong IDs, unsupported risk severities, unknown evidence IDs, and model-origin `VERIFIED` status claims. Component synthesis now gets one bounded repair attempt.
 
-```bash
-cd my-project
-codebase-architect skill install .
-```
+# 17. Fixtures
 
-Resulting path:
+Added three regression fixture repositories:
 
-```text
-my-project/.github/skills/codebase-architect/SKILL.md
-```
+- TypeScript Express checkout API with path alias imports and repository persistence;
+- Python FastAPI checkout API with package imports and repository persistence;
+- event-driven JavaScript flow with publish/consume behavior.
 
-The wheel ships the skill template under `src/codebase_architect/resources/codebase-architect-skill.md`; wheel-installed `skill install` was smoke-tested.
-
-# 9. Security Review
-
-| Finding | Severity | Status | Test/Evidence |
-|---|---|---|---|
-| Remote model endpoint in offline mode | P1 | Fixed | `test_offline_rejects_remote_ollama`, `test_offline_allows_loopback_openai_compatible` |
-| Remote redirect while offline | P1 | Fixed | `test_offline_redirect_to_remote_is_blocked` |
-| URL credentials/query leakage | P1 | Fixed | `test_offline_rejects_userinfo_and_remote_host`; config validator |
-| Provider proxy leakage | P1 | Fixed | `SafeHttpClient` uses `ProxyHandler({})` |
-| Provider error body secret leakage | P1 | Fixed | HTTP error body redacted before exception |
-| AI free-form hallucinated evidence | P1 | Fixed | `test_rejects_wrong_component_and_filters_fake_evidence` |
-| Prompt injection strings in source | P1 | Mitigated | `codebase-architect eval` prompt-injection fixture |
-| Non-generated output overwrite | P1 | Fixed | `test_refuses_to_overwrite_user_authored_doc` |
-| Relative output path traversal | P1 | Fixed | `test_relative_output_cannot_escape_repository` |
-| Secret filter coverage | P2 | Improved | `test_detects_common_secret_classes_without_retaining_values` |
-| Generated Mermaid/SVG injection | P2 | Improved | source review: escaped SVG, cleaned Mermaid labels |
-
-# 10. Tests
+# 18. Test Summary
 
 Command:
 
@@ -186,264 +190,234 @@ Command:
 $env:PYTHONPATH='src'; & 'C:\Users\YellankiKaushik\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m unittest discover -s tests -v
 ```
 
-Result: passed. Tests passed: 21. Tests failed: 0. Duration: 1.319s in final run.
+Result:
+
+- total tests discovered: 67
+- passed: 64
+- failed: 0
+- skipped: 3
+
+Skipped tests:
+
+- real Ollama provider smoke, not requested by environment;
+- real OpenAI-compatible provider smoke, not requested by environment;
+- symlink write rejection smoke, skipped because Windows symlink privilege was unavailable.
+
+# 19. Compile Verification
 
 Command:
 
 ```powershell
-$env:PYTHONPATH='src'; & 'C:\Users\YellankiKaushik\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m compileall -q src
+$env:PYTHONPATH='src'; & 'C:\Users\YellankiKaushik\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m compileall -q src tests
 ```
 
 Result: passed.
 
+# 20. CLI Verification
+
+Passed:
+
+- `doctor --json`
+- `providers --json`
+- `eval --json`
+- `benchmark . --no-llm --exclude .tmp/** --json`
+- `validate .tmp/second-pass-warm --json`
+
+Optional renderer binaries remain unavailable:
+
+- `dot`
+- `d2`
+- `mmdc`
+
+# 21. Package Verification
+
 Command:
 
 ```powershell
-& '.\.tmp\wheel-venv\Scripts\codebase-architect.exe' doctor --json
-```
-
-Result: passed. Optional renderer tools `dot`, `d2`, and `mmdc` were not installed; doctor still passed because they are optional.
-
-Command:
-
-```powershell
-& '.\.tmp\wheel-venv\Scripts\codebase-architect.exe' eval --json
-```
-
-Result: passed. Checks: hallucinated evidence rejection, prompt-injection fixture, no-LLM fixture.
-
-Command:
-
-```powershell
-& '.\.tmp\wheel-venv\Scripts\codebase-architect.exe' providers --json
+& 'C:\Users\YellankiKaushik\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m pip wheel . --no-build-isolation --no-deps -w .tmp\wheels
 ```
 
 Result: passed.
 
-# 11. End-to-End Self Analysis
+Built wheel:
 
-Installed wheel command:
-
-```powershell
-& '.\.tmp\wheel-venv\Scripts\codebase-architect.exe' analyze . --no-llm --output .tmp\self-analysis-final --exclude .tmp/** --json
+```text
+codebase_architect-0.1.0-py3-none-any.whl
 ```
 
-Measured result:
+Wheel size: 66576 bytes.
 
-| Metric | Value |
-|---|---:|
-| discovered files | 75 |
-| analyzed files | 4 |
-| reused files | 71 |
-| failed files | 0 |
-| CIG nodes | 916 |
-| CIG edges | 1954 |
-| LLM calls | 0 |
-| LLM failures | 0 |
-| redactions | 0 |
+# 22. Agent Skill Verification
 
-Validation command:
+Direct command:
 
 ```powershell
-& '.\.tmp\wheel-venv\Scripts\codebase-architect.exe' validate .tmp\self-analysis-final --json
+$env:PYTHONPATH='src'; python -m codebase_architect skill install <temp-dir> --json
+```
+
+Result: passed.
+
+Installed path:
+
+```text
+<temp-dir>/.github/skills/codebase-architect/SKILL.md
+```
+
+# 23. Cold Self-Analysis
+
+Command:
+
+```powershell
+$env:PYTHONPATH='src'; python -m codebase_architect analyze . --no-llm --output .tmp/second-pass-cold --exclude .tmp/** --json
+```
+
+Result:
+
+- files discovered: 97
+- files analyzed: 97
+- files reused: 0
+- files failed: 0
+- graph nodes: 1280
+- graph edges: 3094
+- resolver edges added: 220
+- LLM calls: 0
+- warnings: 0
+- analyzer capabilities: `STRUCTURAL=44`, `AST=53`
+
+# 24. Warm Self-Analysis
+
+Command:
+
+```powershell
+$env:PYTHONPATH='src'; python -m codebase_architect analyze . --no-llm --output .tmp/second-pass-warm --exclude .tmp/** --json
+```
+
+Result:
+
+- files discovered: 97
+- files analyzed: 0
+- files reused: 97
+- files failed: 0
+- graph nodes: 1280
+- graph edges: 3094
+- resolver edges added: 220
+- LLM calls: 0
+- warnings: 0
+- analyzer capabilities: `STRUCTURAL=44`, `AST=53`
+
+# 25. Generated Output Validation
+
+Command:
+
+```powershell
+$env:PYTHONPATH='src'; python -m codebase_architect validate .tmp/second-pass-warm --json
 ```
 
 Result: passed with no errors and no warnings.
 
-Earlier cold self-analysis in the same session discovered/analyzed 75 files, 0 failures, 916 nodes, and 1952 edges.
+# 26. Security P0 Remaining
 
-# 12. CI / Packaging
+None identified in this pass.
 
-CI now includes multi-Python unit/integration tests, eval harness, CLI smoke tests, package build, and wheel install smoke.
+# 27. Security P1 Remaining
 
-Local packaging:
+No confirmed security P1 remains from tested behavior.
 
-```powershell
-& 'C:\Users\YellankiKaushik\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m pip wheel . --no-build-isolation --no-deps -w dist
-```
+Residual security risk:
 
-Result: passed. Final wheel built:
+- real local provider runtimes were not exercised;
+- symlink runtime test was skipped by Windows privilege limitations;
+- regex-based secret finding is not a complete DLP system.
 
-```text
-dist/codebase_architect-0.1.0-py3-none-any.whl
-```
+# 28. Push-Readiness Blockers
 
-`python -m build` could not be run locally because the bundled Python lacks the `build` module and the sandbox blocks dependency downloads. CI installs `build`.
+Blockers for `READY FOR PUSH REVIEW`:
 
-Wheel install smoke:
+- JS/TS analysis remains structural and is explicitly not a real AST/semantic backend;
+- real Ollama provider test was not run;
+- real OpenAI-compatible provider test was not run;
+- optional renderer binaries are unavailable, so rendered diagram output beyond generated Mermaid/SVG source was not verified.
 
-```powershell
-& '.\.tmp\wheel-venv\Scripts\python.exe' -m pip install --no-index --find-links dist --force-reinstall codebase-architect
-```
+# 29. Git / Remote Constraints
 
-Result: passed.
+No commit, push, tag, branch creation, PR creation, or remote operation was performed in this second pass.
 
-# 13. Documentation
+# 30. Final Assessment
 
-User-facing docs added or rewritten:
+The codebase is meaningfully stronger and has a real second-pass regression net. It is ready for another local engineering/security review, but not ready for push review under the stricter criteria supplied for this pass.
 
-- `README.md`
-- `SECURITY.md`
-- `CONTRIBUTING.md`
-- `CHANGELOG.md`
-- `CODE_OF_CONDUCT.md`
-- `docs/DEEP_TECHNICAL_ARCHITECTURE.md`
-- `docs/GETTING_STARTED.md`
-- `docs/LOCAL_MODELS.md`
-- `docs/AGENT_SKILL_USAGE.md`
-- `docs/CONFIGURATION.md`
-- `docs/SECURITY_MODEL.md`
-- `docs/TROUBLESHOOTING.md`
-- `docs/PROVIDER_DEVELOPMENT.md`
-- `docs/ANALYZER_DEVELOPMENT.md`
-- `docs/PERFORMANCE.md`
+# Final Blocker Pass
 
-# 14. Remaining Limitations
+## JS/TS AST Backend
 
-Known static-analysis limitations:
+Backend: `tree-sitter-javascript`, `tree-sitter-typescript`
+Dependency: optional `javascript` extra in `pyproject.toml` with `tree-sitter>=0.25,<0.26`, `tree-sitter-javascript>=0.25,<0.26`, `tree-sitter-typescript>=0.23,<0.24`
+Capability: `AST`
+Fallback: `structural-js-ts` with `STRUCTURAL` capability when tree-sitter parsing/runtime is unavailable
+Files changed: `pyproject.toml`, `src/codebase_architect/analyzers/javascript.py`, `src/codebase_architect/cache.py`, `src/codebase_architect/models.py`, `src/codebase_architect/pipeline.py`, `src/codebase_architect/resolver.py`, `tests/test_javascript_analyzer.py`, `CODEX_ENGINEERING_REPORT.md`
 
-- Cross-file import/export resolution is still shallow.
-- Python call targets remain mostly unresolved/inferred.
-- JS/TS analysis is still structural regex analysis, not a semantic TypeScript compiler model.
-- Dynamic imports, reflection, generated code, metaprogramming, runtime DI, and external systems remain partial or unknown.
+## AST Test Results
 
-Language limitations:
+Total AST-specific tests: 15 direct tests covering the 17 required AST/fallback/manifest cases
+Passed: 15
+Failed: 0
 
-- Implemented analyzers cover Python, JavaScript, TypeScript, and selected config files only.
+## Cross-File Verification
 
-Model limitations:
-
-- Real Ollama/OpenAI-compatible runtimes were not available locally; providers are mock-tested.
-- Structured synthesis cache is not implemented.
-- Model-backed evaluations are optional future work.
-
-Performance limitations:
-
-- No dedicated benchmark command exists yet.
-- Performance methodology is documented in `docs/PERFORMANCE.md`.
-
-Security assumptions:
-
-- Regex-based secret detection is not complete DLP.
-- Local model runtime is trusted as part of the user's local environment.
-- OS filesystem permissions are assumed.
-
-Future work:
-
-- richer graph relationship resolution
-- optional semantic parser backends
-- optional D2/Graphviz renderers
-- larger fixture corpus
-- model-backed evaluation suite
-
-# 15. Deferred Work
-
-- Full whole-repository semantic JS/TS/Python resolution: deferred because it needs a larger parser/resolver design.
-- D2/Graphviz renderers: deferred; current implementation emits Mermaid and SVG source.
-- Model synthesis cache: deferred to avoid persisting prompt/response content before a privacy design is finalized.
-- Dedicated benchmark command: deferred; documented run-manifest methodology added.
-- Runtime-specific LM Studio/llama.cpp/vLLM adapters: deferred because the generic OpenAI-compatible adapter is the implemented compatibility layer.
-
-# 16. Breaking Changes
-
-- `src/codebase_architect/llm.py` became the `src/codebase_architect/llm/` package. Public import `from codebase_architect.llm import provider_from_config` still works.
-- Config now rejects unknown keys.
-- `--offline` now allows `openai-compatible` only when endpoint validation passes.
-- Provider URLs with credentials, query strings, fragments, unsupported schemes, or non-loopback hosts in offline mode are rejected.
-- Non-generated Markdown/diagram outputs are protected unless `output.overwrite = "force"` is set.
-
-# 17. Manual Verification Steps
-
-1. `python -m pip install -e .`
-2. `python -m unittest discover -s tests -v`
-3. `codebase-architect doctor`
-4. `codebase-architect providers`
-5. `codebase-architect eval`
-6. `codebase-architect analyze . --no-llm --output .tmp/manual-check --exclude .tmp/**`
-7. `codebase-architect validate .tmp/manual-check`
-8. In a separate fixture repo: `codebase-architect skill install .`
-9. Optional if Ollama is installed: `codebase-architect doctor --provider ollama --model <their-local-model-name> --offline`
-
-# 18. Git Diff Summary
-
-Pre-report `git status --short`:
+Actual TypeScript fixture graph path:
 
 ```text
- M .codebase-architect.toml.example
- M .github/skills/codebase-architect/SKILL.md
- M .github/workflows/ci.yml
- M .gitignore
- M CONTRIBUTING.md
- M README.md
- M SECURITY.md
- M docs/DEEP_TECHNICAL_ARCHITECTURE.md
- M pyproject.toml
- M src/codebase_architect/analyzers/javascript.py
- M src/codebase_architect/cli.py
- M src/codebase_architect/config.py
- M src/codebase_architect/diagrams.py
- M src/codebase_architect/docs.py
- D src/codebase_architect/llm.py
- M src/codebase_architect/pipeline.py
- M src/codebase_architect/planner.py
- M src/codebase_architect/secret_filter.py
- M tests/test_javascript_analyzer.py
- M tests/test_security.py
-?? .github/ISSUE_TEMPLATE/
-?? .github/pull_request_template.md
-?? CHANGELOG.md
-?? CODE_OF_CONDUCT.md
-?? docs/AGENT_SKILL_USAGE.md
-?? docs/ANALYZER_DEVELOPMENT.md
-?? docs/CONFIGURATION.md
-?? docs/GETTING_STARTED.md
-?? docs/LOCAL_MODELS.md
-?? docs/PERFORMANCE.md
-?? docs/PROVIDER_DEVELOPMENT.md
-?? docs/SECURITY_MODEL.md
-?? docs/TROUBLESHOOTING.md
-?? src/codebase_architect/errors.py
-?? src/codebase_architect/eval.py
-?? src/codebase_architect/file_safety.py
-?? src/codebase_architect/llm/
-?? src/codebase_architect/resources/
-?? tests/test_cli.py
-?? tests/test_config.py
-?? tests/test_llm_providers.py
-?? tests/test_llm_validation.py
-?? tests/test_output_safety.py
+API_ENDPOINT POST /checkout (src/routes/checkout.ts)
+-> METHOD checkout (src/controllers/checkout-controller.ts)
+-> METHOD checkout (src/services/checkout-service.ts)
+-> METHOD save (src/repositories/order-repository.ts)
+-> TABLE orders (src/repositories/order-repository.ts)
 ```
 
-Pre-report `git diff --stat`:
+## Full Test Result
 
-```text
- .codebase-architect.toml.example               |   10 +-
- .github/skills/codebase-architect/SKILL.md     |    4 +-
- .github/workflows/ci.yml                       |   26 +-
- .gitignore                                     |    1 +
- CONTRIBUTING.md                                |   22 +-
- README.md                                      |  227 +-
- SECURITY.md                                    |   45 +-
- docs/DEEP_TECHNICAL_ARCHITECTURE.md            | 5654 +-----------------------
- pyproject.toml                                 |   25 +-
- src/codebase_architect/analyzers/javascript.py |   46 +-
- src/codebase_architect/cli.py                  |   96 +-
- src/codebase_architect/config.py               |  122 +-
- src/codebase_architect/diagrams.py             |   32 +-
- src/codebase_architect/docs.py                 |   23 +-
- src/codebase_architect/llm.py                  |   66 -
- src/codebase_architect/pipeline.py             |   28 +-
- src/codebase_architect/planner.py              |   55 +-
- src/codebase_architect/secret_filter.py        |   34 +-
- tests/test_javascript_analyzer.py              |   11 +
- tests/test_security.py                         |   15 +-
- 20 files changed, 677 insertions(+), 5865 deletions(-)
-```
+Total: 80
+Passed: 77
+Failed: 0
+Skipped: 3
 
-Untracked new files are listed in section 3. The report itself is also a new untracked file.
+## Cold Analysis
 
-# 19. Final Verdict
+files: 104
+nodes: 1379
+edges: 3551
+resolver edges: 279
+duration: 0.665s
 
-READY FOR REVIEW
+## Warm Analysis
 
-The implementation is ready for maintainer review as an alpha-hardening diff. It is not yet ready to claim complete production/beta maturity because deeper cross-file semantic analysis, optional renderer backends, structured model caching, larger fixture corpora, and real-runtime model integration tests remain deferred.
+files reused: 104
+cache hit rate: 1.0
+duration: 0.558s
+
+## Package
+
+wheel: `dist/codebase_architect-0.1.0-py3-none-any.whl`
+clean install: passed with `javascript` extra in `.tmp/final-wheel-venv`
+skill resource packaged: YES
+
+## Optional Runtime Tests
+
+Ollama:
+SKIPPED
+
+OpenAI-compatible:
+SKIPPED
+
+## Security
+
+P0: None identified
+P1: None confirmed
+
+## Documentation
+
+Deep technical architecture docs preserved: YES
+
+## Final Verdict
+
+READY FOR PUSH REVIEW
