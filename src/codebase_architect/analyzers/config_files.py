@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from ..models import Edge, FileAnalysis, Node
+from ..models import AnalyzerCapability, Edge, FileAnalysis, Node
 from .base import evidence, file_node, stable_id
 
 DATASTORE_DEPENDENCIES = {
@@ -21,8 +21,8 @@ KNOWN_STACK = {
 }
 
 def analyze(path: str, content_hash: str, source: str, language: str) -> FileAnalysis:
-    analysis = FileAnalysis(path=path, content_hash=content_hash)
-    fnode = file_node(path, content_hash, language)
+    analysis = FileAnalysis(path=path, content_hash=content_hash, analyzer="config-files", capability=AnalyzerCapability.STRUCTURAL.value, backend="text-json")
+    fnode = file_node(path, content_hash, language, analyzer="config-files", capability=AnalyzerCapability.STRUCTURAL.value, backend="text-json")
     analysis.nodes.append(fnode)
     name = Path(path).name
     if name == "package.json":
