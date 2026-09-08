@@ -5,7 +5,7 @@ from .graph import CodeGraph
 from .llm import GenerationRequest
 from .llm.context import bounded_json, default_budget
 from .llm.prompts import SYSTEM_INSTRUCTIONS, component_prompt
-from .llm.validation import parse_component_synthesis
+from .llm.validation import parse_or_repair_component_synthesis
 from .models import ArchitectureIR
 
 def synthesize_components(air: ArchitectureIR, graph: CodeGraph, provider, stats) -> None:
@@ -27,7 +27,19 @@ def synthesize_components(air: ArchitectureIR, graph: CodeGraph, provider, stats
             ))
             stats.llm_calls += 1
             stats.redactions += result.redactions
-            synthesis, warnings = parse_component_synthesis(result.text, component, graph)
+            def repair(parse_warnings):
+                repair_prompt = prompt + "\n\nYour previous response was rejected. Return only valid JSON matching the schema. Errors: " + "; ".join(parse_warnings[:4])
+                repaired = provider.generate(GenerationRequest(
+                    system=SYSTEM_INSTRUCTIONS,
+                    prompt=repair_prompt,
+                    request_id=f"component-repair-{component.id}-{uuid.uuid4().hex[:12]}",
+                    response_format="json",
+                ))
+                stats.llm_calls += 1
+                stats.redactions += repaired.redactions
+                return repaired.text
+
+            synthesis, warnings = parse_or_repair_component_synthesis(result.text, component, graph, repair)
             stats.warnings.extend(f"{component.name}: {warning}" for warning in warnings)
             if synthesis is not None:
                 component.summary = synthesis.summary_text()
