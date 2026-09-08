@@ -51,12 +51,13 @@ def infer_architecture(repository: Path, graph: CodeGraph, stack: set[str], warn
         "sensitive_candidate": bool(n.properties.get("sensitive_candidate")),
         "classification": n.classification, "evidence": [e.id for e in n.evidence],
     } for n in graph.nodes_by_kind("CONFIGURATION_KEY")]
+    style, reasons = _style(components, stack)
     return ArchitectureIR(
         schema_version=SCHEMA_VERSION, repository_name=repository.name,
-        architecture_style=_style(components, stack),
+        architecture_style=style,
         components=components, external_systems=_dedupe_named(external_systems),
         datastores=_dedupe_named(datastores), api_endpoints=endpoints,
-        configuration_keys=_dedupe_named(config_keys),
+        configuration_keys=_dedupe_named(config_keys), architecture_reasons=reasons,
         workflows=_infer_workflows(graph), stack=sorted(stack), warnings=warnings,
     )
 
@@ -75,25 +76,38 @@ def _responsibility(key: str, members: list, graph: CodeGraph) -> str:
         return "Implements user-facing/client-side application behavior."
     return f"Groups implementation located under `{key}`; exact business responsibility requires semantic evidence."
 
-def _style(components: list[ArchitectureComponent], stack: set[str]) -> str:
+def _style(components: list[ArchitectureComponent], stack: set[str]) -> tuple[str, list[str]]:
     service_like = sum(1 for c in components if c.name.startswith(("services/", "apps/", "packages/")))
-    if service_like >= 3: return "multi-package / service-oriented repository (inferred)"
-    if "Next.js" in stack: return "full-stack web application (inferred)"
-    if len(components) <= 8: return "modular application / monolith (inferred)"
-    return "multi-module application (inferred)"
+    if service_like >= 3:
+        return "multi-package / service-oriented repository (inferred)", [f"{service_like} top-level service/package-style component groups detected"]
+    if "Next.js" in stack:
+        return "full-stack web application (inferred)", ["Next.js dependency or configuration evidence detected"]
+    if len(components) <= 8:
+        return "modular application / monolith (inferred)", [f"{len(components)} component groups detected under one repository root"]
+    return "multi-module application (inferred)", [f"{len(components)} component groups detected"]
 
 def _infer_workflows(graph: CodeGraph) -> list[dict]:
     workflows = []
     for endpoint in graph.nodes_by_kind("API_ENDPOINT"):
-        incoming = [graph.edges[eid] for eid in graph.incoming.get(endpoint.id, set())]
-        source = graph.nodes.get(incoming[0].source) if incoming else None
         steps = [endpoint.name]
-        if source:
-            steps.append(source.name)
-            for node_id in sorted(graph.neighbors(source.id, depth=1)):
-                node = graph.nodes.get(node_id)
-                if node and node.id != source.id and node.kind in {"DATABASE", "EXTERNAL_SYSTEM", "EVENT"}:
+        seen = {endpoint.id}
+        frontier = [endpoint.id]
+        useful_edges = {"HANDLES", "CALLS", "READS", "WRITES", "PUBLISHES", "CONSUMES", "CONNECTS_TO"}
+        while frontier and len(steps) < 12:
+            current = frontier.pop(0)
+            for edge_id in sorted(graph.outgoing.get(current, set())):
+                edge = graph.edges[edge_id]
+                if edge.kind not in useful_edges or edge.target in seen:
+                    continue
+                seen.add(edge.target)
+                node = graph.nodes.get(edge.target)
+                if not node:
+                    continue
+                if node.properties.get("unresolved"):
+                    continue
+                if node.kind in {"FUNCTION", "METHOD", "DATABASE", "TABLE", "EXTERNAL_SYSTEM", "EVENT", "QUEUE"}:
                     steps.append(node.name)
+                frontier.append(edge.target)
         workflows.append({
             "id": f"WF-{len(workflows)+1:03d}", "name": f"Request flow for {endpoint.name}",
             "trigger": endpoint.name, "steps": steps,
